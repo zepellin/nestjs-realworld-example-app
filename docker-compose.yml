@@ -1,0 +1,51 @@
+version: '3.8'
+
+networks:
+  postgres:
+    driver: bridge
+
+services:
+  nestjs-realworld-example-app:
+    build:
+      context: .
+    ports:
+    - ${APP_PORT}:${APP_PORT}
+    environment:
+    - SERVER_PORT=${APP_PORT}
+    - NODE_ENV=${NODE_ENV}
+    - TYPEORM_PASSWORD=${TYPEORM_PASSWORD}
+    - TYPEORM_CONNECTION=${TYPEORM_CONNECTION}
+    - TYPEORM_HOST=${TYPEORM_HOST}
+    - TYPEORM_USERNAME=${TYPEORM_USERNAME}
+    - TYPEORM_DATABASE=${TYPEORM_DATABASE}
+    - TYPEORM_PORT=${TYPEORM_PORT}
+    - TYPEORM_SYNCHRONIZE=${TYPEORM_SYNCHRONIZE}
+    - TYPEORM_LOGGING=${TYPEORM_LOGGING}
+    - TYPEORM_ENTITIES=${TYPEORM_ENTITIES}
+    volumes:
+    - ./:/app
+    command: npm start
+    networks:
+      - postgres
+    depends_on:
+      - postgresdb
+
+  postgresdb:
+    image: postgres:latest
+    restart: always
+    environment:
+      - POSTGRES_DB=${TYPEORM_DATABASE}
+      - POSTGRES_USER=${TYPEORM_USERNAME}
+      - POSTGRES_PASSWORD=${TYPEORM_PASSWORD}
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+    ports:
+      - '${TYPEORM_PORT}:${TYPEORM_PORT}'
+    volumes: 
+      - ./postgres-data:/var/lib/postgresql/data
+      # copy the sql script to create tables
+      - ./sql/create-database.sql:/docker-entrypoint-initdb.d/create-database.sql
+    networks:
+      - postgres
