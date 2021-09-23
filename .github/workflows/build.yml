@@ -1,0 +1,70 @@
+name: Build container, push Node App to GCR, deploy using terraform
+on:
+  push:
+    branches:
+      - master
+jobs:
+  # In this stage we build a docker image of the application and push it to google container registry
+  build-and-push-to-gcr:
+    name: 'Build and publish to GCR'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: google-github-actions/setup-gcloud@master
+      - uses: RafikFarhad/push-to-gcr-github-action@v4
+        with:
+          gcloud_service_key: ${{ secrets.MOONPAYGCP }}
+          registry: gcr.io
+          project_id: moonpay-assignment
+          image_name: nestjs-test
+          image_tag: ${{ github.sha }}
+
+  # In this stage a basic terraform checks are done and the docker container from the build step gets deployed onto Google Cloud Run
+  terraform:
+    name: 'Terraform deployment'
+    needs: build-and-push-to-gcr
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: terraform
+
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file with a Terraform Cloud user API token
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+
+
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    - name: Terraform Init
+      run: terraform init -input=false
+      env:
+        GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+
+    # Validate terraform configuration
+    - name: Terraform Validate
+      id: validate
+      run: terraform validate -no-color
+      env:
+        GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+
+    # Run terraform plan
+    - name: Terraform Plan
+      id: plan
+      run: terraform plan -no-color -var="image_tag=${{ github.sha }}" -var="typeorm_password=${{ secrets.TYPEORM_PASSWORD }}"
+      continue-on-error: false
+      env:
+        GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+
+    # Apply terraform configuration
+    - name: Terraform Apply
+      id: apply
+      run: terraform apply -no-color -input=false -auto-approve -var="image_tag=${{ github.sha }}" -var="typeorm_password=${{ secrets.TYPEORM_PASSWORD }}"
+      continue-on-error: false
+      env:
+        GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
